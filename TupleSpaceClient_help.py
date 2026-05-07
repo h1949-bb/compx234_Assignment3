@@ -21,6 +21,8 @@ def main():
     # TASK 1: Create a TCP/IP socket and connect it to the server.
     # Hint: socket.socket(socket.AF_INET, socket.SOCK_STREAM) creates the socket.
     # Then call sock.connect((hostname, port)) to connect.
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((hostname, port))
 
 
     try:
@@ -30,8 +32,12 @@ def main():
                 continue
 
             parts = line.split(" ", 2)
+            if len(parts) < 2:
+                print(f"{line}: ERR Invalid line format")
+                continue
             cmd = parts[0]
             message = ""
+            key = parts[1]
 
             # TASK 2: Build the protocol message string to send to the server.
             # Format:  "NNN X key"        for READ / GET
@@ -40,15 +46,39 @@ def main():
             # X is "R" for READ and "G" for GET.
             # Hint: for READ/GET, size = 6 + len(key). For PUT, size = 7 + len(key) + len(value).
             # Reject lines with invalid format or key+" "+value > 970 chars.
-
-
+            if cmd == "READ":
+                msg_body = f"R {key}"
+            elif cmd == "GET":
+                msg_body = f"G {key}"
+            elif cmd == "PUT":
+                if len(parts) < 3:
+                    print(f"{line}: ERR PUT needs value")
+                    continue
+                val = parts[2]
+                # 长度校验
+                if len(key) > 999 or len(val) > 999:
+                    print(f"{line}: ERR Key/value too long")
+                    continue
+                if len(f"{key} {val}") > 970:
+                    print(f"{line}: ERR Key+value exceeds 970")
+                    continue
+                msg_body = f"P {key} {val}"
+            else:
+                print(f"{line}: ERR Unknown command")
+                continue
+            full_msg = f"{len(msg_body):03d} {msg_body}"
+            sock.sendall(full_msg.encode())
+             
             # TASK 3: Send the message to the server, then receive the response.
             # - Send:    sock.sendall(message.encode())
             # - Receive: first read 3 bytes to get the response size (like the server does).
             #            Then read the remaining (size - 3) bytes to get the response body.
 
-
-            response = response_buffer.decode().strip()
+            resp_size_bytes = sock.recv(3)
+            if not resp_size_bytes:
+                break
+            resp_size = int(resp_size_bytes.decode())
+            response = sock.recv(resp_size).decode().strip()
             print(f"{line}: {response}")
 
     except (socket.error, ValueError) as e:
